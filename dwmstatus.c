@@ -6,7 +6,9 @@
 #include <stdarg.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/statvfs.h>
 
 char *
@@ -68,17 +70,22 @@ parse_netdev(unsigned long long int *receivedabs, unsigned long long int *sentab
 
 int
 cache_netdev(unsigned long long int *newrec, unsigned long long int *newsent,
-		unsigned long long int *oldrec, unsigned long long int *oldsent)
+		unsigned long long int *oldrec, unsigned long long int *oldsent,
+		time_t *mtime)
 {
 	FILE *cache;
+	struct stat statbuf;
+	const char *path = "/tmp/status";
 
-	if ((cache = fopen("/tmp/status", "r+"))) {
+	if (stat(path, &statbuf) == 0) {
+		*mtime = statbuf.st_mtime;
+		cache = fopen(path, "r+");
 		fscanf(cache, "%llu %llu", oldrec, oldsent);
 		rewind(cache);
 	}
 	else {
-		*oldrec = *newrec; *oldsent = *newsent;
-		cache = fopen("/tmp/status", "w");
+		oldrec = newrec; oldsent = newsent;
+		cache = fopen(path, "w");
 	}
 
 	fprintf(cache, "%llu %llu", *newrec, *newsent);
@@ -95,6 +102,8 @@ get_netusage(char *face)
 	char *downspeedstr, *upspeedstr;
 	char *retstr;
 	int retval;
+	time_t mtime;
+	int interval;
 
 	downspeedstr = (char *) malloc(15);
 	upspeedstr = (char *) malloc(15);
@@ -106,9 +115,12 @@ get_netusage(char *face)
 		exit(1);
 	}
 
-	cache_netdev(&newrec, &newsent, &oldrec, &oldsent);
+	cache_netdev(&newrec, &newsent, &oldrec, &oldsent, &mtime);
 
-	downspeed = (newrec - oldrec) / 1024.0;
+	if ((interval = (time(NULL) - mtime)) == 0)
+		interval = 1;
+
+	downspeed = (newrec - oldrec) / 1024.0 / interval;
 	if (downspeed > 1024.0) {
 		downspeed /= 1024.0;
 		sprintf(downspeedstr, "%.2fMB/s", downspeed);
@@ -116,7 +128,7 @@ get_netusage(char *face)
 		sprintf(downspeedstr, "%.0fkB/s", downspeed);
 	}
 
-	upspeed = (newsent - oldsent) / 1024.0;
+	upspeed = (newsent - oldsent) / 1024.0 / interval;
 	if (upspeed > 1024.0) {
 		upspeed /= 1024.0;
 		sprintf(upspeedstr, "%.2fMB/s", upspeed);
@@ -187,7 +199,7 @@ main(void)
 	netstats = get_netusage("eth0");
 	rootfs = get_freespace("/");
 
-	status = smprintf("%s %s %s /:%s\n", avgs, netstats, mem, rootfs);
+	status = smprintf("%s %s %s /:%s\n", netstats, avgs, mem, rootfs);
 	printf(status);
 
 	free(rootfs);
