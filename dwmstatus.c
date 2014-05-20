@@ -143,6 +143,7 @@ get_netusage(char *face)
 	return retstr;
 }
 
+/*
 char *
 loadavg(void)
 {
@@ -155,6 +156,7 @@ loadavg(void)
 
 	return smprintf("%.2f %.2f %.2f", avgs[0], avgs[1], avgs[2]);
 }
+*/
 
 char *
 get_freespace(char *mntpt)
@@ -166,8 +168,8 @@ get_freespace(char *mntpt)
 		fprintf(stderr, "can't get info on disk.\n");
 		return "?";
 	}
-	total = (data.f_blocks * data.f_frsize);
-	used = (data.f_blocks - data.f_bfree) * data.f_frsize ;
+	total = data.f_blocks;
+	used = (data.f_blocks - data.f_bavail);
 	return smprintf("%.0f%%", (used/total*100));
 }
 
@@ -175,37 +177,38 @@ char *
 get_memusage()
 {
 	FILE *infile;
-	unsigned total, free, buffers, cached;
+	unsigned total, free, avail, buffers, cached;
 
 	infile = fopen("/proc/meminfo","r");
-	fscanf(infile, "MemTotal: %u kB\nMemFree: %u kB\nBuffers: %u kB\nCached: %u kB\n",\
-		&total, &free, &buffers, &cached);
+	fscanf(infile, "MemTotal: %u kB\nMemFree: %u kB\nMemAvailable: %u kB\nBuffers: %u kB\nCached: %u kB\n",\
+		&total, &free, &avail, &buffers, &cached);
 	fclose(infile);
 
-	return smprintf("%dMB", ((total - free - buffers - cached)/1024));
+	return smprintf("%0.fMB", (float)(total - free - buffers - cached)/1024);
 }
 
 int
 main(void)
 {
 	char *status;
-	char *avgs;
+	//char *avgs;
 	char *netstats;
 	char *mem;
 	char *rootfs;
 
-	avgs = loadavg();
+	//avgs = loadavg();
 	mem = get_memusage();
 	netstats = get_netusage("eth0");
 	rootfs = get_freespace("/");
 
-	status = smprintf("%s %s %s /:%s\n", netstats, avgs, mem, rootfs);
+	//status = smprintf("%s %s %s /:%s\n", netstats, avgs, mem, rootfs);
+	status = smprintf("%s %s /:%s\n", netstats, mem, rootfs);
 	printf(status);
 
 	free(rootfs);
 	free(mem);
 	free(netstats);
-	free(avgs);
+	//free(avgs);
 	free(status);
 
 	return 0;
